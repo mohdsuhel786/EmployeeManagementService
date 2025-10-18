@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: employee-management-dev
+  name: hrms-prod
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/mohdsuhel786/EmployeeManagementService.git
-    targetRevision: main        # or dev branch if you have one
-    path: k8s/descriptive
+    targetRevision: main
+    path: k8s/descriptive/k8s-all-services-prod.yaml
     directory:
       recurse: true
   destination:
@@ -20,3 +20,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
