@@ -121,9 +121,9 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: 8085
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: prod
+#          env:
+#            - name: SPRING_PROFILES_ACTIVE
+#              value: prod
           readinessProbe:
             httpGet:
               path: /actuator/health
