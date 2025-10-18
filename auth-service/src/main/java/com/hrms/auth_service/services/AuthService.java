@@ -32,7 +32,7 @@ public class AuthService {
     }
 
     public AuthResponse authenticate(AuthRequest request) {
-        String url = userUrl+ request.getEmail();
+        String url = userUrl+"users/email/"+ request.getEmail();
 
         try {
             UserDTO user = restTemplate.getForObject(url, UserDTO.class);
