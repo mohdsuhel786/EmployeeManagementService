@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/mohdsuhel786/EmployeeManagementService.git
-    targetRevision: main
+    targetRevision: main        # or dev branch if you have one
     path: k8s/descriptive
     directory:
       recurse: true
