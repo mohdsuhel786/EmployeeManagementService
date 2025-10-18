@@ -1,4 +1,55 @@
+# ===================== Service Registry (Eureka) =====================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-registry
+  labels:
+    app: service-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-registry
+  template:
+    metadata:
+      labels:
+        app: service-registry
+    spec:
+      containers:
+        - name: service-registry
+          image: mohdsuhel786/service-registry:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8761
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8761
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8761
+            initialDelaySeconds: 40
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-registry
+spec:
+  type: ClusterIP
+  selector:
+    app: service-registry
+  ports:
+    - protocol: TCP
+      port: 8761
+      targetPort: 8761
+
 # ===================== API Gateway =====================
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +57,7 @@ metadata:
   labels:
     app: api-gateway
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: api-gateway
@@ -15,24 +66,30 @@ spec:
       labels:
         app: api-gateway
     spec:
+      initContainers:
+        - name: wait-for-registry
+          image: busybox
+          command: ['sh', '-c', 'until nc -z service-registry 8761; do echo waiting for registry; sleep 3; done;']
       containers:
         - name: api-gateway
           image: mohdsuhel786/api-gateway:1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8085
-            - name: SPRING_PROFILES_ACTIVE
+            - containerPort: 8080
+          env:
+            - name: EUREKA_URL
+              value: http://service-registry:8761/eureka/
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8085
-            initialDelaySeconds: 20
+              port: 8080
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8085
-            initialDelaySeconds: 40
+              port: 8080
+            initialDelaySeconds: 30
             periodSeconds: 20
 ---
 apiVersion: v1
@@ -40,13 +97,14 @@ kind: Service
 metadata:
   name: api-gateway
 spec:
-  type: LoadBalancer
+  type: NodePort  # Change to ClusterIP if not exposing externally
   selector:
     app: api-gateway
   ports:
     - protocol: TCP
-      port: 8085
-      targetPort: 8085
+      port: 8080
+      targetPort: 8080
+      nodePort: 30002
 
 # ===================== User Service =====================
 ---
@@ -57,7 +115,7 @@ metadata:
   labels:
     app: user-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: user-service
@@ -66,36 +124,30 @@ spec:
       labels:
         app: user-service
     spec:
+      initContainers:
+        - name: wait-for-registry
+          image: busybox
+          command: ['sh', '-c', 'until nc -z service-registry 8761; do echo waiting for registry; sleep 3; done;']
       containers:
         - name: user-service
           image: mohdsuhel786/user-service:1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8088
+            - containerPort: 8081
           env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/hrms_db
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: username
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: password
+            - name: EUREKA_URL
+              value: http://service-registry:8761/eureka/
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8088
-            initialDelaySeconds: 20
+              port: 8081
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8088
-            initialDelaySeconds: 40
+              port: 8081
+            initialDelaySeconds: 30
             periodSeconds: 20
 ---
 apiVersion: v1
@@ -108,8 +160,8 @@ spec:
     app: user-service
   ports:
     - protocol: TCP
-      port: 8088
-      targetPort: 8088
+      port: 8081
+      targetPort: 8081
 
 # ===================== Employee Service =====================
 ---
@@ -120,7 +172,7 @@ metadata:
   labels:
     app: employee-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: employee-service
@@ -129,36 +181,30 @@ spec:
       labels:
         app: employee-service
     spec:
+      initContainers:
+        - name: wait-for-registry
+          image: busybox
+          command: ['sh', '-c', 'until nc -z service-registry 8761; do echo waiting for registry; sleep 3; done;']
       containers:
         - name: employee-service
           image: mohdsuhel786/employee-service:1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8086
+            - containerPort: 8082
           env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/hrms_db
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: username
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: password
+            - name: EUREKA_URL
+              value: http://service-registry:8761/eureka/
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8086
-            initialDelaySeconds: 20
+              port: 8082
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8086
-            initialDelaySeconds: 40
+              port: 8082
+            initialDelaySeconds: 30
             periodSeconds: 20
 ---
 apiVersion: v1
@@ -171,8 +217,8 @@ spec:
     app: employee-service
   ports:
     - protocol: TCP
-      port: 8086
-      targetPort: 8086
+      port: 8082
+      targetPort: 8082
 
 # ===================== Auth Service =====================
 ---
@@ -183,7 +229,7 @@ metadata:
   labels:
     app: auth-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: auth-service
@@ -192,36 +238,30 @@ spec:
       labels:
         app: auth-service
     spec:
+      initContainers:
+        - name: wait-for-registry
+          image: busybox
+          command: ['sh', '-c', 'until nc -z service-registry 8761; do echo waiting for registry; sleep 3; done;']
       containers:
         - name: auth-service
           image: mohdsuhel786/auth-service:1.0
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8089
+            - containerPort: 8083
           env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/hrms_db
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: username
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: password
+            - name: EUREKA_URL
+              value: http://service-registry:8761/eureka/
           readinessProbe:
             httpGet:
               path: /actuator/health
-              port: 8089
-            initialDelaySeconds: 20
+              port: 8083
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
-              port: 8089
-            initialDelaySeconds: 40
+              port: 8083
+            initialDelaySeconds: 30
             periodSeconds: 20
 ---
 apiVersion: v1
@@ -234,90 +274,5 @@ spec:
     app: auth-service
   ports:
     - protocol: TCP
-      port: 8089
-      targetPort: 8089
-
-# ===================== Postgres =====================
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secret
-type: Opaque
-data:
-  username: cG9zdGdyZXM=
-  password: MTIzNDU2
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-config
-data:
-  database: hrms_db
-  host: postgres
-  port: "5432"
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:15
-          ports:
-            - containerPort: 5432
-          env:
-            - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: username
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: password
-            - name: POSTGRES_DB
-              valueFrom:
-                configMapKeyRef:
-                  name: postgres-config
-                  key: database
-          volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: postgres-storage
-      volumes:
-        - name: postgres-storage
-          persistentVolumeClaim:
-            claimName: postgres-pvc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-spec:
-  type: ClusterIP
-  selector:
-    app: postgres
-  ports:
-    - port: 5432
+      port: 8083
+      targetPort: 8083
