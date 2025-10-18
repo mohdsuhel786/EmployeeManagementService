@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="db4a7cdd-57da-4378-99df-943f85ccd847" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/../.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/compiler.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/encodings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api_gateway/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../api_gateway/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api_gateway/src/main/java/com/nursery/api_gateway/ApiGatewayApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/../api_gateway/src/main/java/com/nursery/api_gateway/ApiGatewayApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api_gateway/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../api_gateway/src/main/resources/application.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api_gateway/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../api_gateway/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../auth_service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../auth_service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../auth_service/src/main/java/com/nursery/auth_service/AuthServiceApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/../auth_service/src/main/java/com/nursery/auth_service/AuthServiceApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../auth_service/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../auth_service/src/main/resources/application.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../auth_service/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../auth_service/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/OrderServiceApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/OrderServiceApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/config/ApiConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/config/ApiConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/controllers/OrderController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/controllers/OrderController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/dtos/OrderDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/dtos/OrderDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/dtos/PlantDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/dtos/PlantDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/exceptions/GlobalExceptionHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/exceptions/GlobalExceptionHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/repositories/OrderRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/repositories/OrderRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/services/Fiegn.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/services/FiegnClient.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/services/OrderService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/java/com/nursery/order_service/services/OrderService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/resources/application.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../order_service/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../order_service/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/PlantServiceApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/PlantServiceApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/controllers/PlantController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/controllers/PlantController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/dtos/PlantDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/dtos/PlantDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/exceptions/GlobalExceptionHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/exceptions/GlobalExceptionHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/java/com/nursery/plant_service/services/PlantService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../plant_service/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../plant_service/src/main/resources/application.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/UserServiceApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/UserServiceApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/controller/UserController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/controller/UserController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/dtos/Role.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/exception/GlobalExceptionHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/exception/GlobalExceptionHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/services/UserService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/src/main/java/com/nursery/user_service/services/UserService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../user_service/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../user_service/src/main/resources/application.properties" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 8
+}]]></component>
+  <component name="ProjectId" id="31BCPM3mtAvVHQwA06aKM4DvEpf" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showExcludedFiles" value="false" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/Users/msuhel/Desktop/Assesment_Project/case_study/nursery_management/service-registry"
+  }
+}]]></component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="db4a7cdd-57da-4378-99df-943f85ccd847" name="Changes" comment="" />
+      <created>1754988053475</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1754988053475</updated>
+    </task>
+    <servers />
+  </component>
+</project>

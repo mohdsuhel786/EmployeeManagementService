@@ -1,0 +1,1761 @@
+Index: employee_service/src/main/java/com/hrms/employee_service/feign/UserClient.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/feign/UserClient.java b/employee_service/src/main/java/com/hrms/employee_service/feign/UserClient.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/feign/UserClient.java	
++++ /dev/null	
+@@ -1,25 +0,0 @@
+-package com.hrms.employee_service.feign;
+-
+-import com.hrms.employee_service.dtos.UserDto;
+-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+-import org.springframework.cloud.openfeign.FeignClient;
+-import org.springframework.web.bind.annotation.GetMapping;
+-import org.springframework.web.bind.annotation.PathVariable;
+-
+-@FeignClient(name = "user-service")
+-@CircuitBreaker(name = "userService", fallbackMethod = "getUserFallback")
+-public interface UserClient {
+-    @GetMapping("/api/users/id/{id}")
+-    UserDto getUserById(@PathVariable Long id);
+-
+-    default UserDto getUserFallback(Long id, Throwable t) {
+-        // Fallback logic
+-        UserDto fallback = new UserDto();
+-        fallback.setId(id);
+-        fallback.setName("unknown");
+-        fallback.setEmail("unavailable");
+-        fallback.setRole("GUEST");
+-        return fallback;
+-    }
+-
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/services/LeaveService.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/services/LeaveService.java b/employee_service/src/main/java/com/hrms/employee_service/services/LeaveService.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/services/LeaveService.java	
++++ /dev/null	
+@@ -1,93 +0,0 @@
+-package com.hrms.employee_service.services;
+-
+-import com.hrms.employee_service.dtos.LeaveRequestDTO;
+-import com.hrms.employee_service.dtos.LeaveStatus;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.entities.Leave;
+-import com.hrms.employee_service.exception.EmployeeServiceException;
+-import com.hrms.employee_service.repositories.EmployeeRepository;
+-import com.hrms.employee_service.repositories.LeaveRepository;
+-import org.springframework.stereotype.Service;
+-import org.springframework.transaction.annotation.Transactional;
+-
+-import java.time.DayOfWeek;
+-import java.time.LocalDate;
+-import java.util.List;
+-import java.util.Optional;
+-
+-
+-@Service
+-public class LeaveService {
+-
+-    private final LeaveRepository leaveRepository;
+-    private final HolidayService holidayService;
+-    private final EmployeeRepository employeeRepository;
+-
+-    public LeaveService(LeaveRepository leaveRepository, HolidayService holidayService, EmployeeRepository employeeRepository) {
+-        this.leaveRepository = leaveRepository;
+-        this.holidayService = holidayService;
+-
+-        this.employeeRepository = employeeRepository;
+-    }
+-
+-    @Transactional
+-    public Leave applyLeave(LeaveRequestDTO dto) {
+-        Optional<Employee> optionalEmployee = employeeRepository.findById(dto.getEmployeeId());
+-        if(optionalEmployee.isEmpty()){
+-            throw new EmployeeServiceException("Employee not found!");
+-        }
+-        Leave leave = new Leave();
+-        leave.setEmployeeId(dto.getEmployeeId());
+-        leave.setStartDate(dto.getStartDate());
+-        leave.setEndDate(dto.getEndDate());
+-        leave.setType(dto.getType());
+-        leave.setReason(dto.getReason());
+-        leave.setStatus(LeaveStatus.PENDING);
+-        leave.setAppliedDate(LocalDate.now());
+-
+-        // Validate working days
+-        long workingDays = calculateWorkingDays(dto.getStartDate(), dto.getEndDate());
+-        if (workingDays <= 0) throw new IllegalArgumentException("No working days in selected range");
+-
+-        return leaveRepository.save(leave);
+-    }
+-
+-    public Leave approveLeave(Long leaveId, Long managerId) {
+-        Leave leave = leaveRepository.findById(leaveId)
+-                .orElseThrow(() -> new RuntimeException("Leave not found"));
+-        leave.setStatus(LeaveStatus.APPROVED);
+-        leave.setApprovedBy(managerId);
+-        leave.setDecisionDate(LocalDate.now());
+-        return leaveRepository.save(leave);
+-    }
+-
+-    public Leave cancelLeave(Long leaveId) {
+-        Leave leave = leaveRepository.findById(leaveId)
+-                .orElseThrow(() -> new RuntimeException("Leave not found"));
+-        leave.setStatus(LeaveStatus.CANCELLED);
+-        leave.setDecisionDate(LocalDate.now());
+-        return leaveRepository.save(leave);
+-    }
+-    public List<Leave> getAllLeavesByEmployee(Long employeeId) {
+-        return leaveRepository.findByEmployeeId(employeeId);
+-    }
+-
+-    public List<Leave> getAllAppliedLeavesForManager(Long managerId) {
+-        List<Employee> employees = employeeRepository.findByManagerId(managerId);
+-        List<Long> employeeIds = employees.stream()
+-                .map(Employee::getId)
+-                .toList();
+-        return leaveRepository.findByEmployeeIdInAndStatus(employeeIds, LeaveStatus.PENDING);
+-    }
+-
+-    private long calculateWorkingDays(LocalDate start, LocalDate end) {
+-        return start.datesUntil(end.plusDays(1))
+-                .filter(date -> !holidayService.isHoliday(date) && !isWeekend(date))
+-                .count();
+-    }
+-
+-    private boolean isWeekend(LocalDate date) {
+-        DayOfWeek day = date.getDayOfWeek();
+-        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
+-    }
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/services/HolidayService.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/services/HolidayService.java b/employee_service/src/main/java/com/hrms/employee_service/services/HolidayService.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/services/HolidayService.java	
++++ /dev/null	
+@@ -1,19 +0,0 @@
+-package com.hrms.employee_service.services;
+-
+-import org.springframework.stereotype.Service;
+-
+-import java.time.LocalDate;
+-import java.util.Set;
+-
+-@Service
+-public class HolidayService {
+-    private final Set<LocalDate> holidays = Set.of(
+-            LocalDate.of(2025, 1, 1),
+-            LocalDate.of(2025, 8, 15),
+-            LocalDate.of(2025, 12, 25)
+-    );
+-
+-    public boolean isHoliday(LocalDate date) {
+-        return holidays.contains(date);
+-    }
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/services/EmployeeService.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/services/EmployeeService.java b/employee_service/src/main/java/com/hrms/employee_service/services/EmployeeService.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/services/EmployeeService.java	
++++ /dev/null	
+@@ -1,64 +0,0 @@
+-package com.hrms.employee_service.services;
+-
+-import com.hrms.employee_service.dtos.EmployeeStatus;
+-import com.hrms.employee_service.dtos.EmployeeWithUserDto;
+-import com.hrms.employee_service.dtos.UserDto;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.exception.EmployeeServiceException;
+-import com.hrms.employee_service.feign.UserClient;
+-import com.hrms.employee_service.repositories.EmployeeRepository;
+-import org.springframework.stereotype.Service;
+-
+-import java.util.List;
+-import java.util.Optional;
+-
+-@Service
+-public class EmployeeService {
+-
+-    private final EmployeeRepository employeeRepository;
+-
+-    private final UserClient userClient;
+-
+-    public EmployeeService(EmployeeRepository employeeRepository, UserClient userClient) {
+-        this.employeeRepository = employeeRepository;
+-        this.userClient = userClient;
+-    }
+-
+-    public Employee createEmployee(Employee employee) {
+-        UserDto user = userClient.getUserById(employee.getUserId());
+-        if (user == null) throw new EmployeeServiceException("User not found");
+-        Optional<Employee> optionalEmployee = employeeRepository.findByUserId(employee.getUserId());
+-        if(optionalEmployee.isPresent()) throw new EmployeeServiceException("user already employee with same user id");
+-        employee.setName(user.getName());
+-        employee.setStatus(EmployeeStatus.ACTIVE);
+-        return employeeRepository.save(employee);
+-    }
+-
+-    public List<Employee> getAllEmployees() {
+-        return employeeRepository.findAll();
+-    }
+-
+-    public Employee getEmployeeById(Long id) {
+-        return employeeRepository.findById(id).orElseThrow(() -> new RuntimeException("Employee not found"));
+-    }
+-
+-    public EmployeeWithUserDto getEmployeeDetails(Long id) {
+-        Employee employee = getEmployeeById(id);
+-        UserDto user = userClient.getUserById(employee.getUserId());
+-        return new EmployeeWithUserDto(employee, user);
+-    }
+-
+-    public List<Employee> getEmployeesByManager(Long managerId) {
+-        return employeeRepository.findByManagerId(managerId);
+-    }
+-
+-    public Employee updateStatus(Long id, EmployeeStatus status) {
+-        Employee employee = getEmployeeById(id);
+-        employee.setStatus(status);
+-        return employeeRepository.save(employee);
+-    }
+-
+-    public void deleteEmployee(Long id) {
+-        employeeRepository.deleteById(id);
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/UserDto.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/UserDto.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/UserDto.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/UserDto.java	
++++ /dev/null	
+@@ -1,62 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-
+-
+-
+-public class UserDto {
+-    private Long id;
+-    private String name;
+-    private String email;
+-    private String role;
+-
+-    public UserDto() {
+-    }
+-
+-    public UserDto(Long id, String name, String email, String role) {
+-        this.id = id;
+-        this.name = name;
+-        this.email = email;
+-        this.role = role;
+-    }
+-
+-    public Long getId() {
+-        return id;
+-    }
+-
+-    public void setId(Long id) {
+-        this.id = id;
+-    }
+-
+-    public String getName() {
+-        return name;
+-    }
+-
+-    public void setName(String name) {
+-        this.name = name;
+-    }
+-
+-    public String getEmail() {
+-        return email;
+-    }
+-
+-    public void setEmail(String email) {
+-        this.email = email;
+-    }
+-
+-    public String getRole() {
+-        return role;
+-    }
+-
+-    public void setRole(String role) {
+-        this.role = role;
+-    }
+-
+-    @Override
+-    public String toString() {
+-        return "UserDto{" +
+-                "id=" + id +
+-                ", name='" + name + '\'' +
+-                ", email='" + email + '\'' +
+-                ", role='" + role + '\'' +
+-                '}';
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveType.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveType.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveType.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveType.java	
++++ /dev/null	
+@@ -1,5 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-public enum LeaveType {
+-    SICK, CASUAL, EARNED, UNPAID
+-}
+-
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveStatus.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveStatus.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveStatus.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveStatus.java	
++++ /dev/null	
+@@ -1,5 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-
+-public enum LeaveStatus {
+-    PENDING, APPROVED, REJECTED, CANCELLED
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeStatus.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeStatus.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeStatus.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeStatus.java	
++++ /dev/null	
+@@ -1,4 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-public enum EmployeeStatus {
+-    ACTIVE, INACTIVE
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveRequestDTO.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveRequestDTO.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveRequestDTO.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/LeaveRequestDTO.java	
++++ /dev/null	
+@@ -1,64 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-import jakarta.validation.constraints.*;
+-
+-import java.time.LocalDate;
+-
+-public class LeaveRequestDTO {
+-    @NotNull(message = "Employee ID is required")
+-    private Long employeeId;
+-
+-    @NotNull(message = "Start date is required")
+-    @FutureOrPresent(message = "Start date must be today or in the future")
+-    private LocalDate startDate;
+-
+-    @NotNull(message = "End date is required")
+-    @Future(message = "End date must be in the future")
+-    private LocalDate endDate;
+-
+-    @NotNull(message = "Leave type is required")
+-    private LeaveType type;
+-
+-    @NotBlank(message = "Reason is required")
+-    @Size(min = 5, max = 255, message = "Reason must be between 5 and 255 characters")
+-    private String reason;
+-
+-    public Long getEmployeeId() {
+-        return employeeId;
+-    }
+-
+-    public void setEmployeeId(Long employeeId) {
+-        this.employeeId = employeeId;
+-    }
+-
+-    public LocalDate getStartDate() {
+-        return startDate;
+-    }
+-
+-    public void setStartDate(LocalDate startDate) {
+-        this.startDate = startDate;
+-    }
+-
+-    public LocalDate getEndDate() {
+-        return endDate;
+-    }
+-
+-    public void setEndDate(LocalDate endDate) {
+-        this.endDate = endDate;
+-    }
+-
+-    public LeaveType getType() {
+-        return type;
+-    }
+-
+-    public void setType(LeaveType type) {
+-        this.type = type;
+-    }
+-
+-    public String getReason() {
+-        return reason;
+-    }
+-
+-    public void setReason(String reason) {
+-        this.reason = reason;
+-    }
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeWithUserDto.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeWithUserDto.java b/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeWithUserDto.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/dtos/EmployeeWithUserDto.java	
++++ /dev/null	
+@@ -1,35 +0,0 @@
+-package com.hrms.employee_service.dtos;
+-
+-import com.hrms.employee_service.entities.Employee;
+-import lombok.Generated;
+-
+-@Generated
+-@SuppressWarnings("unused")
+-public class EmployeeWithUserDto {
+-    private Employee employee;
+-    private UserDto user;
+-
+-    public EmployeeWithUserDto(Employee employee, UserDto user) {
+-        this.employee = employee;
+-        this.user = user;
+-    }
+-
+-    // Getters and setters
+-
+-
+-    public Employee getEmployee() {
+-        return employee;
+-    }
+-
+-    public void setEmployee(Employee employee) {
+-        this.employee = employee;
+-    }
+-
+-    public UserDto getUser() {
+-        return user;
+-    }
+-
+-    public void setUser(UserDto user) {
+-        this.user = user;
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/controllers/LeaveController.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/controllers/LeaveController.java b/employee_service/src/main/java/com/hrms/employee_service/controllers/LeaveController.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/controllers/LeaveController.java	
++++ /dev/null	
+@@ -1,55 +0,0 @@
+-package com.hrms.employee_service.controllers;
+-
+-import com.hrms.employee_service.dtos.LeaveRequestDTO;
+-import com.hrms.employee_service.entities.Leave;
+-import com.hrms.employee_service.services.LeaveService;
+-
+-import jakarta.validation.Valid;
+-
+-import org.springframework.http.ResponseEntity;
+-
+-import org.springframework.validation.annotation.Validated;
+-import org.springframework.web.bind.annotation.*;
+-import java.util.*;
+-
+-@RestController
+-@RequestMapping("/api/employees/leaves")
+-@Validated
+-public class LeaveController {
+-
+-    private final LeaveService leaveService;
+-
+-
+-    public LeaveController(LeaveService leaveService) {
+-        this.leaveService = leaveService;
+-    }
+-
+-    @PostMapping("/apply")
+-    public ResponseEntity<Leave> applyLeave(@Valid @RequestBody LeaveRequestDTO dto) {
+-        return ResponseEntity.ok(leaveService.applyLeave(dto));
+-    }
+-
+-    @PutMapping("/approve/{id}")
+-    public ResponseEntity<Leave> approveLeave(@PathVariable Long id, @RequestParam Long managerId) {
+-        return ResponseEntity.ok(leaveService.approveLeave(id, managerId));
+-    }
+-
+-    @PutMapping("/cancel/{id}")
+-    public ResponseEntity<Leave> cancelLeave(@PathVariable Long id) {
+-        return ResponseEntity.ok(leaveService.cancelLeave(id));
+-    }
+-
+-    @GetMapping("/employee/{employeeId}")
+-    public ResponseEntity<List<Leave>> getAllLeavesByEmployee(@PathVariable Long employeeId) {
+-        List<Leave> leaves = leaveService.getAllLeavesByEmployee(employeeId);
+-        return ResponseEntity.ok(leaves);
+-    }
+-
+-    @GetMapping("/manager/{managerId}/pending")
+-    public ResponseEntity<List<Leave>> getAllAppliedLeavesForManager(@PathVariable Long managerId) {
+-        List<Leave> pendingLeaves = leaveService.getAllAppliedLeavesForManager(managerId);
+-        return ResponseEntity.ok(pendingLeaves);
+-    }
+-
+-
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/controllers/EmployeeController.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/controllers/EmployeeController.java b/employee_service/src/main/java/com/hrms/employee_service/controllers/EmployeeController.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/controllers/EmployeeController.java	
++++ /dev/null	
+@@ -1,58 +0,0 @@
+-package com.hrms.employee_service.controllers;
+-
+-import com.hrms.employee_service.dtos.EmployeeStatus;
+-import com.hrms.employee_service.dtos.EmployeeWithUserDto;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.services.EmployeeService;
+-
+-import org.springframework.http.ResponseEntity;
+-import org.springframework.web.bind.annotation.*;
+-
+-import java.util.List;
+-
+-@RestController
+-@RequestMapping("/api/employees")
+-public class EmployeeController {
+-
+-    private final EmployeeService employeeService;
+-
+-    public EmployeeController(EmployeeService employeeService) {
+-        this.employeeService = employeeService;
+-    }
+-
+-    @PostMapping
+-    public ResponseEntity<Employee> create(@RequestBody Employee employee) {
+-        return ResponseEntity.ok(employeeService.createEmployee(employee));
+-    }
+-
+-    @GetMapping
+-    public ResponseEntity<List<Employee>> getAll() {
+-        return ResponseEntity.ok(employeeService.getAllEmployees());
+-    }
+-
+-    @GetMapping("/{id}")
+-    public ResponseEntity<Employee> getById(@PathVariable Long id) {
+-        return ResponseEntity.ok(employeeService.getEmployeeById(id));
+-    }
+-
+-    @GetMapping("/{id}/details")
+-    public ResponseEntity<EmployeeWithUserDto> getDetails(@PathVariable Long id) {
+-        return ResponseEntity.ok(employeeService.getEmployeeDetails(id));
+-    }
+-
+-    @GetMapping("/manager/{managerId}")
+-    public ResponseEntity<List<Employee>> getByManager(@PathVariable Long managerId) {
+-        return ResponseEntity.ok(employeeService.getEmployeesByManager(managerId));
+-    }
+-
+-    @PutMapping("/{id}/status")
+-    public ResponseEntity<Employee> updateStatus(@PathVariable Long id, @RequestParam EmployeeStatus status) {
+-        return ResponseEntity.ok(employeeService.updateStatus(id, status));
+-    }
+-
+-    @DeleteMapping("/{id}")
+-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+-        employeeService.deleteEmployee(id);
+-        return ResponseEntity.noContent().build();
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/repositories/LeaveRepository.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/repositories/LeaveRepository.java b/employee_service/src/main/java/com/hrms/employee_service/repositories/LeaveRepository.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/repositories/LeaveRepository.java	
++++ /dev/null	
+@@ -1,26 +0,0 @@
+-package com.hrms.employee_service.repositories;
+-import com.hrms.employee_service.dtos.LeaveStatus;
+-import com.hrms.employee_service.entities.Leave;
+-import org.springframework.data.jpa.repository.JpaRepository;
+-import org.springframework.stereotype.Repository;
+-
+-import java.time.LocalDate;
+-import java.util.List;
+-
+-@Repository
+-public interface LeaveRepository extends JpaRepository<Leave, Long> {
+-
+-    // Find all leaves for a specific employee
+-    List<Leave> findByEmployeeId(Long employeeId);
+-
+-    // Find all leaves by status
+-    List<Leave> findByStatus(LeaveStatus status);
+-
+-    // Find leaves within a date range
+-    List<Leave> findByStartDateBetween(LocalDate start, LocalDate end);
+-
+-    // Find pending leaves for manager approval
+-    List<Leave> findByStatusAndApprovedByIsNull(LeaveStatus status);
+-    // Find pending leaves for manager approval
+-    List<Leave> findByEmployeeIdInAndStatus(List<Long> employeeIds, LeaveStatus status);
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/repositories/EmployeeRepository.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/repositories/EmployeeRepository.java b/employee_service/src/main/java/com/hrms/employee_service/repositories/EmployeeRepository.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/repositories/EmployeeRepository.java	
++++ /dev/null	
+@@ -1,14 +0,0 @@
+-package com.hrms.employee_service.repositories;
+-
+-import com.hrms.employee_service.entities.Employee;
+-import org.springframework.data.jpa.repository.JpaRepository;
+-import org.springframework.stereotype.Repository;
+-
+-import java.util.List;
+-import java.util.Optional;
+-
+-@Repository
+-public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+-    List<Employee> findByManagerId(Long managerId);
+-    Optional<Employee> findByUserId(Long userId);
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/entities/Leave.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/entities/Leave.java b/employee_service/src/main/java/com/hrms/employee_service/entities/Leave.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/entities/Leave.java	
++++ /dev/null	
+@@ -1,114 +0,0 @@
+-package com.hrms.employee_service.entities;
+-
+-import com.hrms.employee_service.dtos.LeaveStatus;
+-import com.hrms.employee_service.dtos.LeaveType;
+-import jakarta.persistence.*;
+-import lombok.Generated;
+-
+-import java.time.LocalDate;
+-
+-@Entity
+-@Generated
+-@SuppressWarnings("unused")
+-public class Leave {
+-
+-    @Id
+-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+-    private Long id;
+-
+-    private Long employeeId;
+-    private LocalDate startDate;
+-    private LocalDate endDate;
+-
+-    @Enumerated(EnumType.STRING)
+-    private LeaveType type;
+-
+-    @Enumerated(EnumType.STRING)
+-    private LeaveStatus status;
+-
+-    private String reason;
+-    private Long approvedBy; // Manager ID
+-
+-    private LocalDate appliedDate;
+-    private LocalDate decisionDate;
+-
+-    public Long getId() {
+-        return id;
+-    }
+-
+-    public void setId(Long id) {
+-        this.id = id;
+-    }
+-
+-    public Long getEmployeeId() {
+-        return employeeId;
+-    }
+-
+-    public void setEmployeeId(Long employeeId) {
+-        this.employeeId = employeeId;
+-    }
+-
+-    public LocalDate getStartDate() {
+-        return startDate;
+-    }
+-
+-    public void setStartDate(LocalDate startDate) {
+-        this.startDate = startDate;
+-    }
+-
+-    public LocalDate getEndDate() {
+-        return endDate;
+-    }
+-
+-    public void setEndDate(LocalDate endDate) {
+-        this.endDate = endDate;
+-    }
+-
+-    public LeaveType getType() {
+-        return type;
+-    }
+-
+-    public void setType(LeaveType type) {
+-        this.type = type;
+-    }
+-
+-    public LeaveStatus getStatus() {
+-        return status;
+-    }
+-
+-    public void setStatus(LeaveStatus status) {
+-        this.status = status;
+-    }
+-
+-    public String getReason() {
+-        return reason;
+-    }
+-
+-    public void setReason(String reason) {
+-        this.reason = reason;
+-    }
+-
+-    public Long getApprovedBy() {
+-        return approvedBy;
+-    }
+-
+-    public void setApprovedBy(Long approvedBy) {
+-        this.approvedBy = approvedBy;
+-    }
+-
+-    public LocalDate getAppliedDate() {
+-        return appliedDate;
+-    }
+-
+-    public void setAppliedDate(LocalDate appliedDate) {
+-        this.appliedDate = appliedDate;
+-    }
+-
+-    public LocalDate getDecisionDate() {
+-        return decisionDate;
+-    }
+-
+-    public void setDecisionDate(LocalDate decisionDate) {
+-        this.decisionDate = decisionDate;
+-    }
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/entities/Address.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/entities/Address.java b/employee_service/src/main/java/com/hrms/employee_service/entities/Address.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/entities/Address.java	
++++ /dev/null	
+@@ -1,56 +0,0 @@
+-package com.hrms.employee_service.entities;
+-
+-import jakarta.persistence.Embeddable;
+-import lombok.Generated;
+-
+-@Embeddable
+-@Generated
+-@SuppressWarnings("unused")
+-public class Address {
+-    private String street;
+-    private String city;
+-    private String state;
+-    private String zipCode;
+-
+-    public Address() {
+-    }
+-
+-    public Address(String street, String city, String state, String zipCode) {
+-        this.street = street;
+-        this.city = city;
+-        this.state = state;
+-        this.zipCode = zipCode;
+-    }
+-
+-    public String getStreet() {
+-        return street;
+-    }
+-
+-    public void setStreet(String street) {
+-        this.street = street;
+-    }
+-
+-    public String getCity() {
+-        return city;
+-    }
+-
+-    public void setCity(String city) {
+-        this.city = city;
+-    }
+-
+-    public String getState() {
+-        return state;
+-    }
+-
+-    public void setState(String state) {
+-        this.state = state;
+-    }
+-
+-    public String getZipCode() {
+-        return zipCode;
+-    }
+-
+-    public void setZipCode(String zipCode) {
+-        this.zipCode = zipCode;
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/entities/Employee.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/entities/Employee.java b/employee_service/src/main/java/com/hrms/employee_service/entities/Employee.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/entities/Employee.java	
++++ /dev/null	
+@@ -1,115 +0,0 @@
+-package com.hrms.employee_service.entities;
+-
+-import com.hrms.employee_service.dtos.EmployeeStatus;
+-import jakarta.persistence.*;
+-import lombok.Generated;
+-
+-import java.time.LocalDate;
+-
+-@Entity
+-@Generated
+-@SuppressWarnings("unused")
+-public class Employee {
+-    @Id
+-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+-    private Long id;
+-
+-    private Long userId;      // Link to User Service
+-    private Long managerId;   // Link to another Employee
+-
+-    private String name;
+-    private String department;
+-    private String designation;
+-    private LocalDate joiningDate;
+-
+-    @Enumerated(EnumType.STRING)
+-    private EmployeeStatus status;
+-
+-    @Embedded
+-    private Address address;
+-
+-    public Employee() {
+-    }
+-
+-    public Employee(Long id, Long userId, Long managerId, String department, String designation, LocalDate joiningDate, Address address) {
+-        this.id = id;
+-        this.userId = userId;
+-        this.managerId = managerId;
+-        this.department = department;
+-        this.designation = designation;
+-        this.joiningDate = joiningDate;
+-        this.address = address;
+-    }
+-
+-    public Long getId() {
+-        return id;
+-    }
+-
+-    public void setId(Long id) {
+-        this.id = id;
+-    }
+-
+-    public Long getUserId() {
+-        return userId;
+-    }
+-
+-    public void setUserId(Long userId) {
+-        this.userId = userId;
+-    }
+-
+-    public Long getManagerId() {
+-        return managerId;
+-    }
+-
+-    public void setManagerId(Long managerId) {
+-        this.managerId = managerId;
+-    }
+-
+-    public String getName() {
+-        return name;
+-    }
+-
+-    public void setName(String name) {
+-        this.name = name;
+-    }
+-
+-    public String getDepartment() {
+-        return department;
+-    }
+-
+-    public void setDepartment(String department) {
+-        this.department = department;
+-    }
+-
+-    public String getDesignation() {
+-        return designation;
+-    }
+-
+-    public void setDesignation(String designation) {
+-        this.designation = designation;
+-    }
+-
+-    public LocalDate getJoiningDate() {
+-        return joiningDate;
+-    }
+-
+-    public void setJoiningDate(LocalDate joiningDate) {
+-        this.joiningDate = joiningDate;
+-    }
+-
+-    public EmployeeStatus getStatus() {
+-        return status;
+-    }
+-
+-    public void setStatus(EmployeeStatus status) {
+-        this.status = status;
+-    }
+-
+-    public Address getAddress() {
+-        return address;
+-    }
+-
+-    public void setAddress(Address address) {
+-        this.address = address;
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/main/java/com/hrms/employee_service/EmployeeServiceApplication.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/EmployeeServiceApplication.java b/employee_service/src/main/java/com/hrms/employee_service/EmployeeServiceApplication.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/EmployeeServiceApplication.java	
++++ /dev/null	
+@@ -1,17 +0,0 @@
+-package com.hrms.employee_service;
+-
+-import org.springframework.boot.SpringApplication;
+-import org.springframework.boot.autoconfigure.SpringBootApplication;
+-import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+-import org.springframework.cloud.openfeign.EnableFeignClients;
+-
+-@EnableDiscoveryClient
+-@EnableFeignClients
+-@SpringBootApplication
+-public class EmployeeServiceApplication {
+-
+-	public static void main(String[] args) {
+-		SpringApplication.run(EmployeeServiceApplication.class, args);
+-	}
+-
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/exception/GlobalExceptionHandler.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/exception/GlobalExceptionHandler.java b/employee_service/src/main/java/com/hrms/employee_service/exception/GlobalExceptionHandler.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/exception/GlobalExceptionHandler.java	
++++ /dev/null	
+@@ -1,18 +0,0 @@
+-package com.hrms.employee_service.exception;
+-
+-import org.springframework.http.ResponseEntity;
+-import org.springframework.web.bind.MethodArgumentNotValidException;
+-import org.springframework.web.bind.annotation.ExceptionHandler;
+-import org.springframework.web.bind.annotation.RestControllerAdvice;
+-
+-
+-@RestControllerAdvice
+-public class GlobalExceptionHandler {
+-
+-    @ExceptionHandler(MethodArgumentNotValidException.class)
+-    public ResponseEntity<String> handleValidationException(MethodArgumentNotValidException ex) {
+-        return ResponseEntity.badRequest().body("Validation failed");
+-    }
+-
+-
+-}
+Index: employee_service/src/main/java/com/hrms/employee_service/exception/EmployeeServiceException.java
+===================================================================
+diff --git a/employee_service/src/main/java/com/hrms/employee_service/exception/EmployeeServiceException.java b/employee_service/src/main/java/com/hrms/employee_service/exception/EmployeeServiceException.java
+deleted file mode 100644
+--- a/employee_service/src/main/java/com/hrms/employee_service/exception/EmployeeServiceException.java	
++++ /dev/null	
+@@ -1,7 +0,0 @@
+-package com.hrms.employee_service.exception;
+-
+-public class EmployeeServiceException extends RuntimeException{
+-    public EmployeeServiceException(String message){
+-        super(message);
+-    }
+-}
+Index: employee_service/src/main/resources/application.properties
+===================================================================
+diff --git a/employee_service/src/main/resources/application.properties b/employee_service/src/main/resources/application.properties
+deleted file mode 100644
+--- a/employee_service/src/main/resources/application.properties	
++++ /dev/null	
+@@ -1,14 +0,0 @@
+-spring.application.name=employee-service
+-
+-server.port=8086
+-# PostgreSQL DB connection
+-spring.datasource.url=jdbc:postgresql://localhost:5432/hrms_db
+-spring.datasource.username=postgres
+-spring.datasource.password=000000
+-spring.datasource.driver-class-name=org.postgresql.Driver
+-
+-spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation= true
+-spring.jpa.properties.hibernate.dialect= org.hibernate.dialect.PostgreSQLDialect
+-
+-# Hibernate ddl auto (create, create-drop, validate, update)
+-spring.jpa.hibernate.ddl-auto= update
+\ No newline at end of file
+Index: employee_service/src/test/java/com/hrms/employee_service/services/LeaveServiceTest.java
+===================================================================
+diff --git a/employee_service/src/test/java/com/hrms/employee_service/services/LeaveServiceTest.java b/employee_service/src/test/java/com/hrms/employee_service/services/LeaveServiceTest.java
+deleted file mode 100644
+--- a/employee_service/src/test/java/com/hrms/employee_service/services/LeaveServiceTest.java	
++++ /dev/null	
+@@ -1,157 +0,0 @@
+-package com.hrms.employee_service.services;
+-
+-import com.hrms.employee_service.dtos.*;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.entities.Leave;
+-import com.hrms.employee_service.feign.UserClient;
+-import com.hrms.employee_service.repositories.EmployeeRepository;
+-import com.hrms.employee_service.repositories.LeaveRepository;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-
+-import static org.junit.jupiter.api.Assertions.*;
+-
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.mockito.*;
+-import org.mockito.junit.jupiter.MockitoExtension;
+-
+-import java.time.LocalDate;
+-import java.util.List;
+-import java.util.Optional;
+-
+-import static org.mockito.Mockito.*;
+-
+-@ExtendWith(MockitoExtension.class)
+-class LeaveServiceTest {
+-
+-    @Mock
+-    private LeaveRepository leaveRepository;
+-
+-    @Mock
+-    private HolidayService holidayService;
+-
+-    @Mock
+-    private EmployeeRepository employeeRepository;
+-
+-    @Mock
+-    private UserClient userClient;
+-
+-    @InjectMocks
+-    private LeaveService leaveService;
+-
+-    private Employee employee;
+-    private UserDto userDto;
+-
+-    @BeforeEach
+-    void setup() {
+-        employee = new Employee();
+-        employee.setId(1L);
+-        employee.setName("johndoe");
+-        employee.setUserId(100L);
+-        employee.setStatus(EmployeeStatus.ACTIVE);
+-
+-        userDto = new UserDto();
+-        userDto.setId(100L);
+-        userDto.setName("johndoe");
+-        userDto.setEmail("john@example.com");
+-        userDto.setRole("EMPLOYEE");
+-    }
+-
+-    @Test
+-    void testApplyLeave_successful() {
+-        LeaveRequestDTO dto = new LeaveRequestDTO();
+-        dto.setEmployeeId(1L);
+-        dto.setStartDate(LocalDate.of(2025, 8, 14));
+-        dto.setEndDate(LocalDate.of(2025, 8, 16));
+-        dto.setType(LeaveType.SICK);
+-        dto.setReason("Flu");
+-
+-        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+-
+-        // Mock holidays and weekends
+-        when(holidayService.isHoliday(any())).thenReturn(false);
+-        when(leaveRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+-
+-
+-
+-        Leave result = leaveService.applyLeave(dto);
+-
+-        assertEquals(LeaveStatus.PENDING, result.getStatus());
+-        assertEquals(dto.getEmployeeId(), result.getEmployeeId());
+-        assertEquals(dto.getReason(), result.getReason());
+-    }
+-
+-    @Test
+-    void testApplyLeave_noWorkingDays_shouldThrowException() {
+-        LeaveRequestDTO dto = new LeaveRequestDTO();
+-        dto.setEmployeeId(1L);
+-        dto.setStartDate(LocalDate.of(2025, 8, 15)); // Assume holiday
+-        dto.setEndDate(LocalDate.of(2025, 8, 15));
+-        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+-        when(holidayService.isHoliday(any())).thenReturn(true);
+-
+-        assertThrows(IllegalArgumentException.class, () -> leaveService.applyLeave(dto));
+-    }
+-
+-    @Test
+-    void testApproveLeave_successful() {
+-        Leave leave = new Leave();
+-        leave.setId(1L);
+-        leave.setStatus(LeaveStatus.PENDING);
+-
+-        when(leaveRepository.findById(1L)).thenReturn(Optional.of(leave));
+-        when(leaveRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+-
+-        Leave result = leaveService.approveLeave(1L, 99L);
+-
+-        assertEquals(LeaveStatus.APPROVED, result.getStatus());
+-        assertEquals(99L, result.getApprovedBy());
+-        assertNotNull(result.getDecisionDate());
+-    }
+-
+-    @Test
+-    void testCancelLeave_successful() {
+-        Leave leave = new Leave();
+-        leave.setId(2L);
+-        leave.setStatus(LeaveStatus.PENDING);
+-
+-        when(leaveRepository.findById(2L)).thenReturn(Optional.of(leave));
+-        when(leaveRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+-
+-        Leave result = leaveService.cancelLeave(2L);
+-
+-        assertEquals(LeaveStatus.CANCELLED, result.getStatus());
+-    }
+-    @Test
+-    void testGetAllLeavesByEmployee() {
+-        Long employeeId = 1L;
+-        List<Leave> mockLeaves = List.of(new Leave(), new Leave());
+-        when(leaveRepository.findByEmployeeId(employeeId)).thenReturn(mockLeaves);
+-
+-        List<Leave> result = leaveService.getAllLeavesByEmployee(employeeId);
+-
+-        assertEquals(2, result.size());
+-        verify(leaveRepository).findByEmployeeId(employeeId);
+-    }
+-
+-    @Test
+-    void testGetAllAppliedLeavesForManager() {
+-        Long managerId = 10L;
+-        Employee emp1 = new Employee(); emp1.setId(1L);
+-        Employee emp2 = new Employee(); emp2.setId(2L);
+-        List<Employee> employees = List.of(emp1, emp2);
+-        List<Leave> pendingLeaves = List.of(new Leave());
+-
+-        when(employeeRepository.findByManagerId(managerId)).thenReturn(employees);
+-        when(leaveRepository.findByEmployeeIdInAndStatus(List.of(1L, 2L), LeaveStatus.PENDING))
+-                .thenReturn(pendingLeaves);
+-
+-        List<Leave> result = leaveService.getAllAppliedLeavesForManager(managerId);
+-
+-        assertEquals(1, result.size());
+-        verify(employeeRepository).findByManagerId(managerId);
+-        verify(leaveRepository).findByEmployeeIdInAndStatus(List.of(1L, 2L), LeaveStatus.PENDING);
+-    }
+-
+-
+-}
+\ No newline at end of file
+Index: employee_service/src/test/java/com/hrms/employee_service/services/EmployeeServiceTest.java
+===================================================================
+diff --git a/employee_service/src/test/java/com/hrms/employee_service/services/EmployeeServiceTest.java b/employee_service/src/test/java/com/hrms/employee_service/services/EmployeeServiceTest.java
+deleted file mode 100644
+--- a/employee_service/src/test/java/com/hrms/employee_service/services/EmployeeServiceTest.java	
++++ /dev/null	
+@@ -1,179 +0,0 @@
+-package com.hrms.employee_service.services;
+-
+-import com.hrms.employee_service.dtos.EmployeeStatus;
+-import com.hrms.employee_service.dtos.EmployeeWithUserDto;
+-import com.hrms.employee_service.dtos.UserDto;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.exception.EmployeeServiceException;
+-import com.hrms.employee_service.exception.GlobalExceptionHandler;
+-import com.hrms.employee_service.feign.UserClient;
+-import com.hrms.employee_service.repositories.EmployeeRepository;
+-import org.junit.jupiter.api.Assertions;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.mockito.InjectMocks;
+-import org.mockito.Mock;
+-import org.mockito.junit.jupiter.MockitoExtension;
+-import org.springframework.http.HttpStatus;
+-import org.springframework.http.ResponseEntity;
+-import org.springframework.web.bind.MethodArgumentNotValidException;
+-
+-import java.util.List;
+-import java.util.Optional;
+-
+-import static org.junit.jupiter.api.Assertions.*;
+-import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.Mockito.*;
+-
+-@ExtendWith(MockitoExtension.class)
+- class EmployeeServiceTest {
+-
+-    @Mock
+-    private EmployeeRepository employeeRepository;
+-
+-    @Mock
+-    private UserClient userClient;
+-
+-    @InjectMocks
+-    private EmployeeService employeeService;
+-
+-    private Employee employee;
+-    private UserDto userDto;
+-
+-    @BeforeEach
+-    void setup() {
+-        employee = new Employee();
+-        employee.setId(1L);
+-        employee.setName("johndoe");
+-        employee.setUserId(100L);
+-        employee.setStatus(EmployeeStatus.ACTIVE);
+-
+-        userDto = new UserDto();
+-        userDto.setId(100L);
+-        userDto.setName("johndoe");
+-        userDto.setEmail("john@example.com");
+-        userDto.setRole("EMPLOYEE");
+-    }
+-
+-    @Test
+-    void testCreateEmployee() {
+-        when(userClient.getUserById(100L)).thenReturn(userDto);
+-        when(employeeRepository.save(employee)).thenReturn(employee);
+-
+-        Employee result = employeeService.createEmployee(employee);
+-
+-        assertEquals("johndoe", result.getName());
+-        verify(employeeRepository).save(employee);
+-    }
+-
+-    @Test
+-    void testGetEmployeeById() {
+-        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+-
+-        Employee result = employeeService.getEmployeeById(1L);
+-
+-        assertEquals(1L, result.getId());
+-        assertEquals(EmployeeStatus.ACTIVE, result.getStatus());
+-    }
+-
+-
+-    @Test
+-    void testFindAll() {
+-        List<Employee> mockEmployees = List.of(
+-                new Employee(),
+-                new Employee()
+-        );
+-
+-        when(employeeRepository.findAll()).thenReturn(mockEmployees);
+-
+-        List<Employee> result = employeeService.getAllEmployees();
+-
+-        Assertions.assertEquals(2, result.size());
+-    }
+-    @Test
+-  void testCreateEmployeeUserNotFound() {
+-
+-
+-        when(userClient.getUserById(100L)).thenReturn(null);
+-
+-        EmployeeServiceException exception = Assertions.assertThrows(
+-                EmployeeServiceException.class,
+-                () -> employeeService.createEmployee(employee)
+-        );
+-
+-        Assertions.assertEquals("User not found", exception.getMessage());
+-    }
+-
+-    @Test
+-    void testGetEmployeeDetails() {
+-        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+-        when(userClient.getUserById(100L)).thenReturn(userDto);
+-
+-        EmployeeWithUserDto result = employeeService.getEmployeeDetails(1L);
+-
+-        assertEquals("johndoe", result.getEmployee().getName());
+-        assertEquals("johndoe", result.getUser().getName());
+-    }
+-
+-    @Test
+-    void testUpdateStatus() {
+-        when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+-        when(employeeRepository.save(any(Employee.class))).thenReturn(employee);
+-
+-        Employee updated = employeeService.updateStatus(1L, EmployeeStatus.ACTIVE);
+-
+-        assertEquals(EmployeeStatus.ACTIVE, updated.getStatus());
+-
+-    }
+-
+-    @Test
+-    void testDeleteEmployee() {
+-        employeeService.deleteEmployee(1L);
+-        verify(employeeRepository).deleteById(1L);
+-    }
+-
+-    @Test
+-    void testGetEmployeesByManager() {
+-        List<Employee> employees = List.of(employee);
+-        when(employeeRepository.findByManagerId(2L)).thenReturn(employees);
+-
+-        List<Employee> result = employeeService.getEmployeesByManager(2L);
+-
+-        assertEquals(1, result.size());
+-        assertEquals("johndoe", result.get(0).getName());
+-    }
+-
+-
+-    private final UserClient userClient2 = new UserClient() {
+-        @Override
+-        public UserDto getUserById(Long id) {
+-            return null; // Not needed for this test
+-        }
+-    };
+-
+-@Test
+- void testGetUserFallback() {
+-        Long userId = 123L;
+-        Throwable cause = new RuntimeException("Service unavailable");
+-
+-        UserDto fallbackUser = userClient2.getUserFallback(userId, cause);
+-
+-    assertNotNull(fallbackUser);
+-
+-    assertEquals(userId, fallbackUser.getId());
+-        assertEquals("unknown", fallbackUser.getName());
+-        assertEquals("unavailable", fallbackUser.getEmail());
+-        assertEquals("GUEST", fallbackUser.getRole());
+-    }
+-
+-
+-    @Test
+-    void testHandleValidationException() {
+-        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+-        MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
+-        ResponseEntity<String> response = handler.handleValidationException(ex);
+-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+-        assertEquals("Validation failed", response.getBody());
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/test/java/com/hrms/employee_service/controllers/EmployeeControllerTest.java
+===================================================================
+diff --git a/employee_service/src/test/java/com/hrms/employee_service/controllers/EmployeeControllerTest.java b/employee_service/src/test/java/com/hrms/employee_service/controllers/EmployeeControllerTest.java
+deleted file mode 100644
+--- a/employee_service/src/test/java/com/hrms/employee_service/controllers/EmployeeControllerTest.java	
++++ /dev/null	
+@@ -1,103 +0,0 @@
+-package com.hrms.employee_service.controllers;
+-
+-import com.hrms.employee_service.dtos.EmployeeStatus;
+-import com.hrms.employee_service.dtos.EmployeeWithUserDto;
+-import com.hrms.employee_service.dtos.UserDto;
+-import com.hrms.employee_service.entities.Address;
+-import com.hrms.employee_service.entities.Employee;
+-import com.hrms.employee_service.services.EmployeeService;
+-import org.junit.jupiter.api.BeforeEach;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.mockito.InjectMocks;
+-import org.mockito.Mock;
+-import org.mockito.junit.jupiter.MockitoExtension;
+-import org.springframework.http.HttpStatus;
+-import org.springframework.http.ResponseEntity;
+-
+-import java.time.LocalDate;
+-import java.util.List;
+-
+-import static org.junit.jupiter.api.Assertions.*;
+-import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.Mockito.doNothing;
+-import static org.mockito.Mockito.when;
+-
+-@ExtendWith(MockitoExtension.class)
+- class EmployeeControllerTest {
+-
+-    @Mock
+-    private EmployeeService employeeService;
+-
+-    @InjectMocks
+-    private EmployeeController employeeController;
+-
+-    private Employee employee;
+-
+-    @BeforeEach
+-    void setup() {
+-        employee = new Employee(1L,1L,100L,"Engineering","Developer",LocalDate.of(2023, 1, 1),new Address("123 Main St","Chennai","TN","600001"));
+-        employee.setName("John Doe");
+-        employee.setStatus(EmployeeStatus.ACTIVE);
+-    }
+-
+-    @Test
+-    void testCreateEmployee() {
+-        when(employeeService.createEmployee(any(Employee.class))).thenReturn(employee);
+-
+-        ResponseEntity<Employee> response = employeeController.create(employee);
+-
+-        assertEquals(HttpStatus.OK, response.getStatusCode());
+-        assertEquals("John Doe", response.getBody().getName());
+-    }
+-
+-    @Test
+-    void testGetAllEmployees() {
+-        when(employeeService.getAllEmployees()).thenReturn(List.of(employee));
+-
+-        ResponseEntity<List<Employee>> response = employeeController.getAll();
+-
+-        assertEquals(HttpStatus.OK, response.getStatusCode());
+-        assertEquals(1, response.getBody().size());
+-        assertEquals("John Doe", response.getBody().get(0).getName());
+-    }
+-
+-    @Test
+-    void testGetEmployeeById() {
+-        when(employeeService.getEmployeeById(1L)).thenReturn(employee);
+-        ResponseEntity<Employee> response = employeeController.getById(1L);
+-        assertEquals(HttpStatus.OK, response.getStatusCode());
+-        assertEquals("John Doe", response.getBody().getName());
+-    }
+-    @Test
+-    void testGetManagerId() {
+-        when(employeeService.getEmployeesByManager(1L)).thenReturn(List.of(new Employee(),new Employee()));
+-        ResponseEntity<List<Employee>> response = employeeController.getByManager(1L);
+-        assertEquals(HttpStatus.OK, response.getStatusCode());
+-        assertEquals(2, response.getBody().size());
+-    }
+-    @Test
+-  void testDeleteEmployee() {
+-        doNothing().when(employeeService).deleteEmployee(1L);
+-
+-        ResponseEntity<Void> response = employeeController.delete(1L);
+-
+-        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+-        assertNull(response.getBody());
+-    }
+-
+-    @Test
+-    void testGetEmployeeDetails() {
+-        UserDto userDto = new UserDto(100L,"johndoe","john@example.com","EMPLOYEE");
+-
+-
+-        EmployeeWithUserDto dto = new EmployeeWithUserDto(employee, userDto);
+-        when(employeeService.getEmployeeDetails(1L)).thenReturn(dto);
+-
+-        ResponseEntity<EmployeeWithUserDto> response = employeeController.getDetails(1L);
+-
+-        assertEquals(HttpStatus.OK, response.getStatusCode());
+-        assertEquals("John Doe", response.getBody().getEmployee().getName());
+-        assertEquals("johndoe", response.getBody().getUser().getName());
+-    }
+-}
+\ No newline at end of file
+Index: employee_service/src/test/java/com/hrms/employee_service/EmployeeServiceApplicationTests.java
+===================================================================
+diff --git a/employee_service/src/test/java/com/hrms/employee_service/EmployeeServiceApplicationTests.java b/employee_service/src/test/java/com/hrms/employee_service/EmployeeServiceApplicationTests.java
+deleted file mode 100644
+--- a/employee_service/src/test/java/com/hrms/employee_service/EmployeeServiceApplicationTests.java	
++++ /dev/null	
+@@ -1,13 +0,0 @@
+-package com.hrms.employee_service;
+-
+-import org.junit.jupiter.api.Test;
+-import org.springframework.boot.test.context.SpringBootTest;
+-
+-@SpringBootTest
+-class EmployeeServiceApplicationTests {
+-
+-	@Test
+-	void contextLoads() {
+-	}
+-
+-}
+Index: employee_service/pom.xml
+===================================================================
+diff --git a/employee_service/pom.xml b/employee_service/pom.xml
+deleted file mode 100644
+--- a/employee_service/pom.xml	
++++ /dev/null	
+@@ -1,156 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+-	<modelVersion>4.0.0</modelVersion>
+-	<parent>
+-		<groupId>org.springframework.boot</groupId>
+-		<artifactId>spring-boot-starter-parent</artifactId>
+-		<version>3.5.4</version>
+-		<relativePath/> <!-- lookup parent from repository -->
+-	</parent>
+-	<groupId>com.hrms</groupId>
+-	<artifactId>employee_service</artifactId>
+-	<version>0.0.1-SNAPSHOT</version>
+-	<name>employee_service</name>
+-	<description>Demo project for Spring Boot</description>
+-	<url/>
+-	<licenses>
+-		<license/>
+-	</licenses>
+-	<developers>
+-		<developer/>
+-	</developers>
+-	<scm>
+-		<connection/>
+-		<developerConnection/>
+-		<tag/>
+-		<url/>
+-	</scm>
+-	<properties>
+-		<java.version>17</java.version>
+-		<spring-cloud.version>2025.0.0</spring-cloud.version>
+-	</properties>
+-	<dependencies>
+-		<dependency>
+-			<groupId>org.springframework.boot</groupId>
+-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.hibernate.validator</groupId>
+-			<artifactId>hibernate-validator</artifactId>
+-			<version>8.0.1.Final</version>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.boot</groupId>
+-			<artifactId>spring-boot-starter-actuator</artifactId>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.boot</groupId>
+-			<artifactId>spring-boot-starter-web</artifactId>
+-		</dependency>
+-		<dependency>
+-			<groupId>jakarta.validation</groupId>
+-			<artifactId>jakarta.validation-api</artifactId>
+-			<version>3.0.2</version>
+-		</dependency>
+-
+-		<dependency>
+-			<groupId>org.springframework.boot</groupId>
+-			<artifactId>spring-boot-devtools</artifactId>
+-			<scope>runtime</scope>
+-			<optional>true</optional>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.postgresql</groupId>
+-			<artifactId>postgresql</artifactId>
+-			<scope>runtime</scope>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.projectlombok</groupId>
+-			<artifactId>lombok</artifactId>
+-			<optional>true</optional>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.cloud</groupId>
+-			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.boot</groupId>
+-			<artifactId>spring-boot-starter-test</artifactId>
+-			<scope>test</scope>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.cloud</groupId>
+-			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.security</groupId>
+-			<artifactId>spring-security-test</artifactId>
+-			<scope>test</scope>
+-		</dependency>
+-		<dependency>
+-			<groupId>org.springframework.cloud</groupId>
+-			<artifactId>spring-cloud-starter-openfeign</artifactId>
+-		</dependency>
+-	</dependencies>
+-
+-	<dependencyManagement>
+-		<dependencies>
+-			<dependency>
+-				<groupId>org.springframework.cloud</groupId>
+-				<artifactId>spring-cloud-dependencies</artifactId>
+-				<version>${spring-cloud.version}</version>
+-				<type>pom</type>
+-				<scope>import</scope>
+-			</dependency>
+-		</dependencies>
+-	</dependencyManagement>
+-	<build>
+-		<plugins>
+-			<plugin>
+-				<groupId>org.apache.maven.plugins</groupId>
+-				<artifactId>maven-compiler-plugin</artifactId>
+-				<configuration>
+-					<annotationProcessorPaths>
+-						<path>
+-							<groupId>org.projectlombok</groupId>
+-							<artifactId>lombok</artifactId>
+-						</path>
+-					</annotationProcessorPaths>
+-				</configuration>
+-			</plugin>
+-			<plugin>
+-				<groupId>org.springframework.boot</groupId>
+-				<artifactId>spring-boot-maven-plugin</artifactId>
+-				<configuration>
+-					<excludes>
+-						<exclude>
+-							<groupId>org.projectlombok</groupId>
+-							<artifactId>lombok</artifactId>
+-						</exclude>
+-					</excludes>
+-				</configuration>
+-			</plugin>
+-			<plugin>
+-				<groupId>org.jacoco</groupId>
+-				<artifactId>jacoco-maven-plugin</artifactId>
+-				<version>0.8.10</version> <!-- Use the latest stable version -->
+-				<executions>
+-					<execution>
+-						<goals>
+-							<goal>prepare-agent</goal>
+-						</goals>
+-					</execution>
+-					<execution>
+-						<id>report</id>
+-						<phase>verify</phase>
+-						<goals>
+-							<goal>report</goal>
+-						</goals>
+-					</execution>
+-				</executions>
+-			</plugin>
+-		</plugins>
+-	</build>
+-
+-</project>
+Index: employee_service/.gitignore
+===================================================================
+diff --git a/employee_service/.gitignore b/employee_service/.gitignore
+deleted file mode 100644
+--- a/employee_service/.gitignore	
++++ /dev/null	
+@@ -1,33 +0,0 @@
+-HELP.md
+-target/
+-.mvn/wrapper/maven-wrapper.jar
+-!**/src/main/**/target/
+-!**/src/test/**/target/
+-
+-### STS ###
+-.apt_generated
+-.classpath
+-.factorypath
+-.project
+-.settings
+-.springBeans
+-.sts4-cache
+-
+-### IntelliJ IDEA ###
+-.idea
+-*.iws
+-*.iml
+-*.ipr
+-
+-### NetBeans ###
+-/nbproject/private/
+-/nbbuild/
+-/dist/
+-/nbdist/
+-/.nb-gradle/
+-build/
+-!**/src/main/**/build/
+-!**/src/test/**/build/
+-
+-### VS Code ###
+-.vscode/
+Index: employee_service/.mvn/wrapper/maven-wrapper.properties
+===================================================================
+diff --git a/employee_service/.mvn/wrapper/maven-wrapper.properties b/employee_service/.mvn/wrapper/maven-wrapper.properties
+deleted file mode 100644
+--- a/employee_service/.mvn/wrapper/maven-wrapper.properties	
++++ /dev/null	
+@@ -1,19 +0,0 @@
+-# Licensed to the Apache Software Foundation (ASF) under one
+-# or more contributor license agreements.  See the NOTICE file
+-# distributed with this work for additional information
+-# regarding copyright ownership.  The ASF licenses this file
+-# to you under the Apache License, Version 2.0 (the
+-# "License"); you may not use this file except in compliance
+-# with the License.  You may obtain a copy of the License at
+-#
+-#   http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing,
+-# software distributed under the License is distributed on an
+-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-# KIND, either express or implied.  See the License for the
+-# specific language governing permissions and limitations
+-# under the License.
+-wrapperVersion=3.3.2
+-distributionType=only-script
+-distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip
+diff --git a/employee_service/mvnw.cmd b/employee_service/mvnw.cmd
+deleted file mode 100644
+index 249bdf3822221aa612d1da2605316cabd7b07e50..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/employee_service/.gitattributes b/employee_service/.gitattributes
+deleted file mode 100644
+index 3b41682ac579fafb665abb4dfcdaa6aaaa712184..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/employee_service/mvnw b/employee_service/mvnw
+deleted file mode 100644
+index 19529ddf8c6eaa08c5c75ff80652d21ce4b72f8c..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+

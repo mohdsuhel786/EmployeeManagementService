@@ -1,0 +1,29 @@
+jwt:
+  secret: dTdxIUE5ZEBMMHBAUTJyJFM1dl5XOHoqQjFlJkc0aEo=
+eureka:
+  client:
+    service-url:
+#      defaultZone: http://service-registry:8761/eureka/
+          defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+    # Retry in background if Eureka is down
+    registry-fetch-interval-seconds: 3000000
+    # Don’t fail the app if Eureka is not reachable on startup
+    healthcheck:
+      enabled: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+
+spring:
+  cloud:
+    loadbalancer:
+      retry:
+        enabled: true
+
+    # Optional: disable fail-fast in case of Config Server + Eureka combo
+    config:
+      fail-fast: false
+

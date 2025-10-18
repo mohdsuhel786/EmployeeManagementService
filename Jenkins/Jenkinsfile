@@ -1,0 +1,163 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'ENV', choices: ['LOCAL', 'PROD'], description: 'Select environment to build/deploy')
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Git branch to build')
+        choice(name: 'BUMP', choices: ['patch', 'minor', 'major'], description: 'Select version bump type')
+    }
+
+    environment {
+        BASE_PATH = 'EmployeeManagementSystem'
+        SERVICES = ['service-registry', 'api-gateway', 'auth-service', 'user-service', 'employee-service']
+        AWS_REGION = 'ap-south-1'
+        ECR_ACCOUNT = '123456789012'
+        SLACK_CHANNEL = '#ci-cd'
+        MAIL_RECIPIENTS = 'team@example.com'
+        VERSION_FILE = "${WORKSPACE}/version.txt"
+    }
+
+    tools {
+        jdk 'JDK17'
+        maven 'Maven3'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: "${params.BRANCH}", url: 'https://github.com/yourorg/EmployeeManagementSystem.git'
+            }
+        }
+
+        stage('Versioning') {
+            steps {
+                script {
+                    def currentVersion = readFile('version.txt').trim()
+                    def parts = currentVersion.tokenize('.').collect { it as Integer }
+
+                    if (params.BUMP == 'patch') {
+                        parts[2] += 1
+                    } else if (params.BUMP == 'minor') {
+                        parts[1] += 1
+                        parts[2] = 0
+                    } else if (params.BUMP == 'major') {
+                        parts[0] += 1
+                        parts[1] = 0
+                        parts[2] = 0
+                    }
+
+                    env.NEW_VERSION = parts.join('.')
+                    writeFile file: 'version.txt', text: env.NEW_VERSION
+                    sh "git config user.email 'ci@example.com'"
+                    sh "git config user.name 'Jenkins CI'"
+                    sh "git add version.txt && git commit -m 'Bump version to ${env.NEW_VERSION}' && git push origin ${params.BRANCH}"
+
+                    echo "New version: ${env.NEW_VERSION}"
+                }
+            }
+        }
+
+        stage('Login to ECR (if PROD)') {
+            when { expression { params.ENV == 'PROD' } }
+            steps {
+                sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                """
+            }
+        }
+
+        stage('Detect Changed Services') {
+            steps {
+                script {
+                    changedServices = []
+
+                    if (params.ENV == 'PROD') {
+                        for (svc in SERVICES) {
+                            def result = sh(script: "git diff --name-only HEAD~1 HEAD | grep '^${BASE_PATH}/${svc}/'", returnStatus: true)
+                            if (result == 0) {
+                                changedServices.add(svc)
+                            }
+                        }
+
+                        if (changedServices.size() == 0) {
+                            echo "No services changed. Skipping build."
+                            currentBuild.result = 'SUCCESS'
+                            return
+                        } else {
+                            echo "Services to build: ${changedServices}"
+                        }
+                    } else {
+                        changedServices = SERVICES
+                        echo "Local environment: building all services"
+                    }
+                }
+            }
+        }
+
+        stage('Build and Push Docker Images') {
+            steps {
+                script {
+                    def builds = changedServices.collectEntries { svc ->
+                        [(svc): {
+                            dir("${WORKSPACE}/${BASE_PATH}/${svc}") {
+                                def tag = "${env.NEW_VERSION}-${GIT_COMMIT.take(7)}"
+                                if (params.ENV == 'LOCAL') {
+                                    bat "mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=${svc}:${tag}"
+                                } else {
+                                    sh """
+                                        mvn clean package -DskipTests jib:build \
+                                        -Djib.to.image=${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/${svc}:${tag}
+                                    """
+                                }
+                                echo "Built image ${svc}:${tag}"
+                            }
+                        }]
+                    }
+                    parallel builds
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    for (svc in changedServices) {
+                        try {
+                            if (params.ENV == 'LOCAL') {
+                                bat "kubectl apply -f ${BASE_PATH}/k8s/descriptive/k8s-all-services.yaml"
+                            } else {
+                                sh "kubectl apply -f ${WORKSPACE}/${BASE_PATH}/k8s/descriptive/${svc}-deployment.yaml"
+                            }
+                        } catch (err) {
+                            echo "Deployment failed for ${svc}. Rolling back..."
+                            if (params.ENV == 'PROD') {
+                                sh "kubectl rollout undo deployment/${svc}"
+                            }
+                            error("Deployment failed for ${svc}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            slackSend(channel: "${SLACK_CHANNEL}", color: 'good', message: "✅ Build Success: Job ${env.JOB_NAME} Build ${env.BUILD_NUMBER}")
+            mail to: "${MAIL_RECIPIENTS}",
+                 subject: "✅ Jenkins Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "Build SUCCESSFUL for job ${env.JOB_NAME} Build #${env.BUILD_NUMBER}\nVersion: ${env.NEW_VERSION}\nCheck Jenkins console: ${env.BUILD_URL}"
+        }
+        failure {
+            slackSend(channel: "${SLACK_CHANNEL}", color: 'danger', message: "❌ Build Failed: Job ${env.JOB_NAME} Build ${env.BUILD_NUMBER}")
+            mail to: "${MAIL_RECIPIENTS}",
+                 subject: "❌ Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "Build FAILED for job ${env.JOB_NAME} Build #${env.BUILD_NUMBER}\nVersion: ${env.NEW_VERSION}\nCheck Jenkins console: ${env.BUILD_URL}"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
