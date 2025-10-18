@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: employee-management-dev
+  name: employee-management-prod
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/mohdsuhel786/EmployeeManagementService.git
     targetRevision: main
-    path: k8s/descriptive
+    path: k8s/descriptive/prod  # <-- folder containing your YAML
     directory:
       recurse: true
   destination:
