@@ -180,8 +180,8 @@ spec:
           ports:
             - containerPort: 8088
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: prod
+#            - name: SPRING_PROFILES_ACTIVE
+#              value: prod
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres:5432/hrms_db
             - name: SPRING_DATASOURCE_USERNAME
@@ -249,8 +249,8 @@ spec:
           ports:
             - containerPort: 8086
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: prod
+#            - name: SPRING_PROFILES_ACTIVE
+#              value: prod
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres:5432/hrms_db
             - name: SPRING_DATASOURCE_USERNAME
@@ -318,8 +318,8 @@ spec:
           ports:
             - containerPort: 8089
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: prod
+#            - name: SPRING_PROFILES_ACTIVE
+#              value: prod
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres:5432/hrms_db
             - name: SPRING_DATASOURCE_USERNAME
