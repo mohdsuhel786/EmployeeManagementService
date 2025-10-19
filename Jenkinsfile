@@ -84,16 +84,16 @@ pipeline {
             }
         }
 
-        stage('Trigger ArgoCD Sync') {
-            steps {
-                script {
-                    // ArgoCD CLI must be installed and logged in
-                    def appName = params.ENV == 'prod' ? 'employee-management-prod' : 'employee-management-dev'
-                    bat "argocd app sync ${appName} --grpc-web"
-                    echo "Triggered ArgoCD sync for ${appName}"
-                }
-            }
-        }
+//         stage('Trigger ArgoCD Sync') {
+//             steps {
+//                 script {
+//                     // ArgoCD CLI must be installed and logged in
+//                     def appName = params.ENV == 'prod' ? 'employee-management-prod' : 'employee-management-dev'
+//                     bat "argocd app sync ${appName} --grpc-web"
+//                     echo "Triggered ArgoCD sync for ${appName}"
+//                 }
+//             }
+//         }
 
     }
 
