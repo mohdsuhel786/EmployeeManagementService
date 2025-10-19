@@ -18,7 +18,8 @@ pipeline {
 
     environment {
         REPO_URL = 'https://github.com/mohdsuhel786/EmployeeManagementService.git'
-        DOCKER_REGISTRY = '' // leave empty for Docker Desktop local images
+        // Leave empty for Docker Desktop local images
+        DOCKER_REGISTRY = ''
     }
 
     stages {
@@ -29,14 +30,39 @@ pipeline {
             }
         }
 
+        stage('Detect Changed Services') {
+            steps {
+                script {
+                    changedServices = []
+
+                    for (svc in services) {
+                        // Check if any file changed in the service folder
+                        def result = bat(
+                            script: "git diff --name-only HEAD~1 HEAD | findstr /R /C:\"^${basePath.replaceAll('\\\\','/').replaceAll(':','')}/${svc}/\"",
+                            returnStatus: true
+                        )
+                        if (result == 0) {
+                            changedServices.add(svc)
+                        }
+                    }
+
+                    if (changedServices.size() == 0) {
+                        echo "No services changed. Building all services for local environment."
+                        changedServices = services
+                    } else {
+                        echo "Services to build: ${changedServices}"
+                    }
+                }
+            }
+        }
+
         stage('Build Docker Images') {
             steps {
                 script {
-                    def builds = services.collectEntries { svc ->
+                    def builds = changedServices.collectEntries { svc ->
                         [(svc): {
                             dir("${basePath}/${svc}") {
                                 echo "Building Docker image for ${svc}"
-                                // Build Docker image using Jib (local Docker Desktop)
                                 bat "mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=${svc}:latest"
                             }
                         }]
@@ -47,10 +73,10 @@ pipeline {
         }
 
         stage('Push Images (optional)') {
-            when { expression { env.DOCKER_REGISTRY != '' } }
+            when { expression { env.DOCKER_REGISTRY && env.DOCKER_REGISTRY != '' } }
             steps {
                 script {
-                    services.each { svc ->
+                    changedServices.each { svc ->
                         bat "docker tag ${svc}:latest ${DOCKER_REGISTRY}/${svc}:latest"
                         bat "docker push ${DOCKER_REGISTRY}/${svc}:latest"
                     }
@@ -61,14 +87,14 @@ pipeline {
         stage('Trigger ArgoCD Sync') {
             steps {
                 script {
-                    // Trigger ArgoCD sync via CLI
-                    // Make sure ArgoCD CLI (argocd) is installed and logged in
+                    // ArgoCD CLI must be installed and logged in
                     def appName = params.ENV == 'prod' ? 'employee-management-prod' : 'employee-management-dev'
                     bat "argocd app sync ${appName} --grpc-web"
                     echo "Triggered ArgoCD sync for ${appName}"
                 }
             }
         }
+
     }
 
     post {
