@@ -1,0 +1,96 @@
+name: EmployeeManagementService CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Git branch to build'
+        required: true
+        default: 'main'
+      env:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    env:
+      REPO_URL: 'https://github.com/mohdsuhel786/EmployeeManagementService.git'
+      BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
+      DOCKER_REGISTRY: '' # Optional, fill if pushing images
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Maven 3
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Detect changed services
+        id: detect_changes
+        run: |
+          $services = "service-registry","api-gateway","auth-service","user-service","employee-service"
+          $changed = @()
+          git fetch --depth=2 origin ${{ github.event.inputs.branch || 'main' }}
+          foreach ($svc in $services) {
+              $diff = git diff --name-only HEAD~1 HEAD | Select-String -Pattern "$env:BASE_PATH/$svc/"
+              if ($diff) {
+                  $changed += $svc
+              }
+          }
+          if ($changed.Count -eq 0) {
+              Write-Host "No services changed. Building all services."
+              $changed = $services
+          }
+          Write-Host "Services to build: $($changed -join ',')"
+          echo "::set-output name=services::${changed -join ','}"
+
+      - name: Build Docker images
+        run: |
+          $changedServices = "${{ steps.detect_changes.outputs.services }}".Split(",")
+          foreach ($svc in $changedServices) {
+              Write-Host "Building Docker image for $svc"
+              cd "$env:BASE_PATH\$svc"
+              mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
+          }
+
+      - name: Push Docker images (optional)
+        if: env.DOCKER_REGISTRY != ''
+        run: |
+          $changedServices = "${{ steps.detect_changes.outputs.services }}".Split(",")
+          foreach ($svc in $changedServices) {
+              docker tag $svc:latest $env:DOCKER_REGISTRY/$svc:latest
+              docker push $env:DOCKER_REGISTRY/$svc:latest
+          }
+
+      - name: Trigger ArgoCD sync
+        run: |
+          $appName = "${{ github.event.inputs.env }}" -eq "prod" ? "employee-management-prod" : "employee-management-dev"
+          argocd app sync $appName --grpc-web
+          Write-Host "Triggered ArgoCD sync for $appName"
+
+      - name: Cleanup workspace
+        run: |
+          Remove-Item -Recurse -Force $env:BASE_PATH\*
