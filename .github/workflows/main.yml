@@ -62,15 +62,17 @@ jobs:
           Write-Host "Services to build: $($changed -join ',')"
           "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Build Docker images locally
+      - name: Build Docker images
         shell: powershell
         run: |
           $changedServices = "${{ steps.detect.outputs.services }}".Split(",")
           foreach ($svc in $changedServices) {
               Write-Host "Building Docker image for $svc"
-              Set-Location "$Env:BASE_PATH\$svc"
-              mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
+              Push-Location "$Env:BASE_PATH\$svc"
+              & mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
+              Pop-Location
           }
+      
       
 
       - name: Optional Docker push
