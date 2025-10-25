@@ -92,11 +92,11 @@ jobs:
 #          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
 #          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
 #
-#      - name: Trigger ArgoCD sync
-#        if: ${{ env.ARGOCD_SERVER != '' && github.event.inputs.env != '' }}
-#        shell: powershell
-#        run: |
-#          $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
-#          argocd login $Env:ARGOCD_SERVER --grpc-web --auth-token $Env:ARGOCD_TOKEN
-#          argocd app sync $appName --grpc-web
-#          Write-Host "Triggered ArgoCD sync for $appName"
+      - name: Trigger ArgoCD sync
+        if: ${{ env.ARGOCD_SERVER != '' && github.event.inputs.env != '' }}
+        shell: powershell
+        run: |
+          $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
+          argocd login $Env:ARGOCD_SERVER --grpc-web --auth-token $Env:ARGOCD_TOKEN
+          argocd app sync $appName --grpc-web
+          Write-Host "Triggered ArgoCD sync for $appName"
