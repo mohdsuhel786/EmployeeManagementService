@@ -18,22 +18,32 @@ on:
           - dev
           - prod
 
+env:
+  SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
+  BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
+  DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
+  ARGOCD_SERVER: ''  # set your ArgoCD server URL
+  ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+
 jobs:
   detect-services:
     runs-on: [self-hosted, windows]
     outputs:
-      services-json: ${{ steps.set-output.outputs.services-json }}
+      services: ${{ steps.set-output.outputs.services }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Detect changed services
         id: set-output
         shell: powershell
         run: |
-          $services = "service-registry,api-gateway,auth-service,user-service,employee-service".Split(",")
-          git fetch --depth=2 origin main
+          Write-Host "Detecting changed services..."
           $changed = @()
+          $services = "${{ env.SERVICES }}".Split(",")
+          git fetch --depth=2 origin main
           foreach ($svc in $services) {
               if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "^$svc/") {
                   $changed += $svc
@@ -43,21 +53,21 @@ jobs:
               Write-Host "No changes detected. Building all services."
               $changed = $services
           }
-          Write-Host "Changed services: $($changed -join ',')"
-          $json = ($changed | ForEach-Object { "`"$_`"" }) -join ','
-          $json = "[$json]"
-          Write-Host "services-json=$json" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Services to build: $($changed -join ',')"
+          "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
   build-and-deploy:
     needs: detect-services
     runs-on: [self-hosted, windows]
     strategy:
-      fail-fast: false
       matrix:
-        service: ${{ fromJSON(needs.detect-services.outputs.services-json) }}
+        service: [service-registry, api-gateway, auth-service, user-service, employee-service]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -67,22 +77,23 @@ jobs:
           cache: maven
 
       - name: Build Docker image
+        if: ${{ contains(needs.detect-services.outputs.services, matrix.service) }}
         shell: powershell
         run: |
           Write-Host "Building Docker image for ${{ matrix.service }}"
-          Push-Location "$Env:BASE_PATH\${{ matrix.service }}"
+          Push-Location "${{ env.BASE_PATH }}\${{ matrix.service }}"
           & mvn -T 1C clean package -DskipTests jib:dockerBuild "-Djib.to.image=${{ matrix.service }}:latest"
           Pop-Location
 
-      - name: Optional Docker push
-        if: env.DOCKER_REGISTRY != ''
-        shell: powershell
-        run: |
-          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-
+      #      - name: Optional Docker push
+      #        if: ${{ env.DOCKER_REGISTRY != '' && contains(needs.detect-services.outputs.services, matrix.service) }}
+      #        shell: powershell
+      #        run: |
+      #          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
+      #          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
+      #
       - name: Trigger ArgoCD sync
-        if: env.ARGOCD_SERVER != ''
+        if: ${{ env.ARGOCD_SERVER != '' && github.event.inputs.env != '' }}
         shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
