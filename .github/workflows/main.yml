@@ -22,11 +22,9 @@ env:
   SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
   BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
   DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
-  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-  ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+  ARGOCD_SERVER: '' # set your ArgoCD server URL
 
 jobs:
-
   detect-services:
     runs-on: [self-hosted, windows]
     outputs:
@@ -39,26 +37,27 @@ jobs:
         id: detect
         shell: powershell
         run: |
-          $changed = @()
+          Write-Host "Detecting changed services..."
           $services = $Env:SERVICES.Split(",")
           git fetch --depth=2 origin main
           $diffFiles = git diff --name-only origin/main..HEAD
 
+          $changed = @()
           foreach ($svc in $services) {
               if ($diffFiles | Select-String -Pattern "^$svc/") {
                   $changed += $svc
               }
           }
 
-          if ($changed.Count -eq 0) {
-              Write-Host "No changes detected. Skipping builds."
-              $changed = @()
-          } else {
-              Write-Host "Changed services: $($changed -join ',')"
+          # If root files changed or nothing detected, build all services
+          $rootFilesChanged = $diffFiles | Select-String -Pattern "^(pom.xml|\.github/|docker-compose\.yml|.*\.properties|.*\.yml|.*\.config)"
+          if ($changed.Count -eq 0 -or $rootFilesChanged) {
+              Write-Host "Root files or no services changed. Building all services."
+              $changed = $services
           }
 
-          # Output as JSON array for matrix
           $jsonArray = $changed | ConvertTo-Json -Compress
+          Write-Host "Detected services JSON: $jsonArray"
           Write-Host "services-json=$jsonArray" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
   build-and-deploy:
@@ -71,6 +70,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -87,15 +88,15 @@ jobs:
           & mvn -T 1C clean package -DskipTests jib:dockerBuild "-Djib.to.image=${{ matrix.service }}:latest"
           Pop-Location
 
-      - name: Push Docker image
-        if: env.DOCKER_REGISTRY != ''
+      - name: Optional Docker push
+        if: ${{ env.DOCKER_REGISTRY != '' }}
         shell: powershell
         run: |
           docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
           docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
 
       - name: Trigger ArgoCD sync
-        if: env.ARGOCD_SERVER != ''
+        if: ${{ env.ARGOCD_SERVER != '' }}
         shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
