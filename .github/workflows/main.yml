@@ -20,15 +20,22 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: windows-latest  # matches Docker Desktop paths
+    runs-on: self-hosted
+    labels:
+      - windows
 
     env:
       SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
       BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
+      DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service' # optional, if pushing to Docker Hub
+      ARGOCD_SERVER: ''  # set your ArgoCD server URL
+      ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
@@ -39,32 +46,49 @@ jobs:
 
       - name: Detect changed services
         id: detect
+        shell: pwsh
         run: |
+          Write-Host "Detecting changed services..."
           $changed = @()
           $services = $Env:SERVICES.Split(",")
           git fetch --depth=2 origin ${{ github.ref_name }}
           foreach ($svc in $services) {
-              if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "$Env:BASE_PATH/$svc/") {
+              if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "^$svc/") {
                   $changed += $svc
               }
           }
           if ($changed.Count -eq 0) {
+              Write-Host "No changes detected. Building all services."
               $changed = $services
           }
           Write-Host "Services to build: $($changed -join ',')"
           echo "::set-output name=services::${changed -join ','}"
 
-      - name: Build Docker images
+      - name: Build Docker images locally
+        shell: pwsh
         run: |
           $changedServices = "${{ steps.detect.outputs.services }}".Split(",")
           foreach ($svc in $changedServices) {
               Write-Host "Building Docker image for $svc"
-              cd "$Env:BASE_PATH\$svc"
+              Set-Location "$Env:BASE_PATH\$svc"
               mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
           }
 
-      - name: Trigger ArgoCD sync
+      - name: Optional Docker push
+        if: env.DOCKER_REGISTRY != ''
+        shell: pwsh
         run: |
-          $appName = if (${{ github.event.inputs.env }} -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
+          $changedServices = "${{ steps.detect.outputs.services }}".Split(",")
+          foreach ($svc in $changedServices) {
+              docker tag $svc:latest $Env:DOCKER_REGISTRY/$svc:latest
+              docker push $Env:DOCKER_REGISTRY/$svc:latest
+          }
+
+      - name: Trigger ArgoCD sync
+        if: env.ARGOCD_SERVER != ''
+        shell: pwsh
+        run: |
+          $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
+          argocd login $Env:ARGOCD_SERVER --grpc-web --auth-token $Env:ARGOCD_TOKEN
           argocd app sync $appName --grpc-web
           Write-Host "Triggered ArgoCD sync for $appName"
