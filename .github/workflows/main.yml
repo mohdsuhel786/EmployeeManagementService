@@ -18,56 +18,36 @@ on:
           - dev
           - prod
 
-env:
-  SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
-  BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
-  DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
-  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-  ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
-
 jobs:
-
-  # Step 1: Detect changed services
   detect-services:
     runs-on: [self-hosted, windows]
     outputs:
-      services-json: ${{ steps.detect.outputs.services-json }}
+      services-json: ${{ steps.set-output.outputs.services-json }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
 
       - name: Detect changed services
-        id: detect
+        id: set-output
         shell: powershell
         run: |
-          Write-Host "Detecting changed services..."
-          $services = $Env:SERVICES.Split(",")
+          $services = "service-registry,api-gateway,auth-service,user-service,employee-service".Split(",")
           git fetch --depth=2 origin main
-          $diffFiles = git diff --name-only origin/main..HEAD
-
           $changed = @()
           foreach ($svc in $services) {
-              if ($diffFiles | Select-String -Pattern "^$svc/") {
+              if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "^$svc/") {
                   $changed += $svc
               }
           }
-
-          # If root files changed or nothing detected, build all services
-          $rootFilesChanged = $diffFiles | Select-String -Pattern "^(pom.xml|\.github/|docker-compose\.yml|.*\.properties|.*\.yml|.*\.config)"
-          if ($changed.Count -eq 0 -or $rootFilesChanged) {
-              Write-Host "Root files changed or nothing detected. Building all services."
+          if ($changed.Count -eq 0) {
+              Write-Host "No changes detected. Building all services."
               $changed = $services
           }
+          Write-Host "Changed services: $($changed -join ',')"
+          $json = ($changed | ForEach-Object { "`"$_`"" }) -join ','
+          $json = "[$json]"
+          Write-Host "services-json=$json" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-          # Convert to JSON array
-          if ($changed.Count -eq 0) { $changed = @() }
-          $jsonArray = $changed | ConvertTo-Json -Compress
-          Write-Host "Detected services JSON: $jsonArray"
-          Write-Host "services-json=$jsonArray" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-  # Step 2: Build and deploy
   build-and-deploy:
     needs: detect-services
     runs-on: [self-hosted, windows]
@@ -75,12 +55,9 @@ jobs:
       fail-fast: false
       matrix:
         service: ${{ fromJSON(needs.detect-services.outputs.services-json) }}
-    if: matrix.service != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
