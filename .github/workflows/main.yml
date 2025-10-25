@@ -86,15 +86,15 @@ jobs:
 
   sync-argocd:
     needs: build-and-deploy
-    runs-on: [self-hosted, windows]
+    runs-on: [ self-hosted, windows ]
     steps:
       - name: Trigger ArgoCD sync
         shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
           Write-Host "Syncing app: $appName"
-          argocd version
           argocd login $Env:ARGOCD_SERVER --grpc-web --insecure --auth-token $Env:ARGOCD_TOKEN
           argocd app list
           argocd app sync $appName --grpc-web
           Write-Host "ArgoCD sync triggered successfully."
+  
