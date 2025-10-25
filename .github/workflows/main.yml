@@ -22,7 +22,7 @@ env:
   SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
   BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
   DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
-  ARGOCD_SERVER: ''  # set your ArgoCD server URL
+  ARGOCD_SERVER: 'http://localhost:8080'  # set your ArgoCD server URL
   ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
 
 jobs:
@@ -61,8 +61,7 @@ jobs:
     runs-on: [self-hosted, windows]
     strategy:
       matrix:
-        service: [service-registry, api-gateway, auth-service, user-service, employee-service]
-
+        service: [service-registry,api-gateway,auth-service,user-service,employee-service]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -85,18 +84,17 @@ jobs:
           & mvn -T 1C clean package -DskipTests jib:dockerBuild "-Djib.to.image=${{ matrix.service }}:latest"
           Pop-Location
 
-      #      - name: Optional Docker push
-      #        if: ${{ env.DOCKER_REGISTRY != '' && contains(needs.detect-services.outputs.services, matrix.service) }}
-      #        shell: powershell
-      #        run: |
-      #          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-      #          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-      #
+  sync-argocd:
+    needs: build-and-deploy
+    runs-on: [self-hosted, windows]
+    steps:
       - name: Trigger ArgoCD sync
-        if: ${{ env.ARGOCD_SERVER != '' && github.event.inputs.env != '' }}
         shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
-          argocd login $Env:ARGOCD_SERVER --grpc-web --auth-token $Env:ARGOCD_TOKEN
+          Write-Host "Syncing app: $appName"
+          argocd version
+          argocd login $Env:ARGOCD_SERVER --grpc-web --insecure --auth-token $Env:ARGOCD_TOKEN
+          argocd app list
           argocd app sync $appName --grpc-web
-          Write-Host "Triggered ArgoCD sync for $appName"
+          Write-Host "ArgoCD sync triggered successfully."
