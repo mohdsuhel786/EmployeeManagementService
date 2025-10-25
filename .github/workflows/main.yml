@@ -69,7 +69,7 @@ jobs:
           foreach ($svc in $changedServices) {
               Write-Host "Building Docker image for $svc"
               Push-Location "$Env:BASE_PATH\$svc"
-              & mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
+              & mvn -T 1C clean package -DskipTests jib:dockerBuild "-Djib.to.image=$svc:latest"
               Pop-Location
           }
       
