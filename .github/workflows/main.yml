@@ -20,9 +20,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: self-hosted
-    labels:
-      - windows
+    runs-on: [self-hosted, windows]
 
     env:
       SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
