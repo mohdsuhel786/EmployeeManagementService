@@ -63,7 +63,7 @@ jobs:
           "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build Docker images locally
-        shell: pwsh
+        shell: powershell
         run: |
           $changedServices = "${{ steps.detect.outputs.services }}".Split(",")
           foreach ($svc in $changedServices) {
@@ -71,10 +71,11 @@ jobs:
               Set-Location "$Env:BASE_PATH\$svc"
               mvn -T 1C clean package -DskipTests jib:dockerBuild -Djib.to.image=$svc:latest
           }
+      
 
       - name: Optional Docker push
         if: env.DOCKER_REGISTRY != ''
-        shell: pwsh
+        shell: powershell
         run: |
           $changedServices = "${{ steps.detect.outputs.services }}".Split(",")
           foreach ($svc in $changedServices) {
@@ -84,7 +85,7 @@ jobs:
 
       - name: Trigger ArgoCD sync
         if: env.ARGOCD_SERVER != ''
-        shell: pwsh
+        shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
           argocd login $Env:ARGOCD_SERVER --grpc-web --auth-token $Env:ARGOCD_TOKEN
