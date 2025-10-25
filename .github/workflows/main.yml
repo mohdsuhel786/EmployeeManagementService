@@ -22,14 +22,16 @@ env:
   SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
   BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
   DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
-  ARGOCD_SERVER: ''  # set your ArgoCD server URL
+  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
   ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
 
 jobs:
+
+  # Step 1: Detect changed services
   detect-services:
     runs-on: [self-hosted, windows]
     outputs:
-      services: ${{ steps.set-output.outputs.services }}
+      services: ${{ steps.detect.outputs.services }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -37,32 +39,39 @@ jobs:
           ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Detect changed services
-        id: set-output
+        id: detect
         shell: powershell
         run: |
           Write-Host "Detecting changed services..."
           $changed = @()
-          $services = "${{ env.SERVICES }}".Split(",")
+          $services = $Env:SERVICES.Split(",")
+
+          # Fetch main branch
           git fetch --depth=2 origin main
+          $diffFiles = git diff --name-only origin/main..HEAD
+
           foreach ($svc in $services) {
-              if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "^$svc/") {
+              if ($diffFiles | Select-String -Pattern "^$svc/") {
                   $changed += $svc
               }
           }
+
           if ($changed.Count -eq 0) {
-              Write-Host "No changes detected. Building all services."
-              $changed = $services
+              Write-Host "No service folder changes detected. Skipping build."
+          } else {
+              Write-Host "Services to build: $($changed -join ',')"
           }
-          Write-Host "Services to build: $($changed -join ',')"
+
           "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+  # Step 2: Build changed services in parallel
   build-and-deploy:
     needs: detect-services
     runs-on: [self-hosted, windows]
     strategy:
+      fail-fast: false
       matrix:
-        service: [service-registry, api-gateway, auth-service, user-service, employee-service]
-
+        service: ${{ fromJSON('["' + needs.detect-services.outputs.services.Replace(',', '","') + '"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -77,7 +86,6 @@ jobs:
           cache: maven
 
       - name: Build Docker image
-        if: ${{ contains(needs.detect-services.outputs.services, matrix.service) }}
         shell: powershell
         run: |
           Write-Host "Building Docker image for ${{ matrix.service }}"
@@ -85,15 +93,15 @@ jobs:
           & mvn -T 1C clean package -DskipTests jib:dockerBuild "-Djib.to.image=${{ matrix.service }}:latest"
           Pop-Location
 
-#      - name: Optional Docker push
-#        if: ${{ env.DOCKER_REGISTRY != '' && contains(needs.detect-services.outputs.services, matrix.service) }}
-#        shell: powershell
-#        run: |
-#          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-#          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
-#
+      - name: Push Docker image
+        if: env.DOCKER_REGISTRY != ''
+        shell: powershell
+        run: |
+          docker tag ${{ matrix.service }}:latest $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
+          docker push $Env:DOCKER_REGISTRY/${{ matrix.service }}:latest
+
       - name: Trigger ArgoCD sync
-        if: ${{ env.ARGOCD_SERVER != '' && github.event.inputs.env != '' }}
+        if: env.ARGOCD_SERVER != ''
         shell: powershell
         run: |
           $appName = if ("${{ github.event.inputs.env }}" -eq "prod") { "employee-management-prod" } else { "employee-management-dev" }
