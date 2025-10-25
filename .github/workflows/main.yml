@@ -56,6 +56,11 @@ jobs:
               $changed = $services
           }
 
+          # Ensure we always have a JSON array
+          if ($changed.Count -eq 0) {
+              $changed = @()  # fallback empty array
+          }
+
           $jsonArray = $changed | ConvertTo-Json -Compress
           Write-Host "Detected services JSON: $jsonArray"
           Write-Host "services-json=$jsonArray" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
