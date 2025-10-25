@@ -27,7 +27,7 @@ jobs:
     env:
       SERVICES: service-registry,api-gateway,auth-service,user-service,employee-service
       BASE_PATH: 'D:/Workbench/micrservice-working/EmployeeManagementSystem/EmployeeManagementSystem'
-      DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service' # optional, if pushing to Docker Hub
+      DOCKER_REGISTRY: 'mohdsuhel786/employee_management_service'
       ARGOCD_SERVER: ''  # set your ArgoCD server URL
       ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
 
@@ -62,7 +62,8 @@ jobs:
               $changed = $services
           }
           Write-Host "Services to build: $($changed -join ',')"
-          echo "::set-output name=services::${changed -join ','}"
+          # Use new syntax for outputs
+          "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build Docker images locally
         shell: pwsh
