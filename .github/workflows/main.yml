@@ -27,26 +27,20 @@ env:
 
 jobs:
 
-  # Step 1: Detect changed services
   detect-services:
     runs-on: [self-hosted, windows]
     outputs:
-      services: ${{ steps.detect.outputs.services }}
+      services-json: ${{ steps.detect.outputs.services-json }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Detect changed services
         id: detect
         shell: powershell
         run: |
-          Write-Host "Detecting changed services..."
           $changed = @()
           $services = $Env:SERVICES.Split(",")
-
-          # Fetch main branch
           git fetch --depth=2 origin main
           $diffFiles = git diff --name-only origin/main..HEAD
 
@@ -57,26 +51,26 @@ jobs:
           }
 
           if ($changed.Count -eq 0) {
-              Write-Host "No service folder changes detected. Skipping build."
+              Write-Host "No changes detected. Skipping builds."
+              $changed = @()
           } else {
-              Write-Host "Services to build: $($changed -join ',')"
+              Write-Host "Changed services: $($changed -join ',')"
           }
 
-          "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          # Output as JSON array for matrix
+          $jsonArray = $changed | ConvertTo-Json -Compress
+          Write-Host "services-json=$jsonArray" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-  # Step 2: Build changed services in parallel
   build-and-deploy:
     needs: detect-services
     runs-on: [self-hosted, windows]
     strategy:
       fail-fast: false
       matrix:
-        service: ${{ fromJSON('["' + needs.detect-services.outputs.services.Replace(',', '","') + '"]') }}
+        service: ${{ fromJSON(needs.detect-services.outputs.services-json) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.inputs.branch || github.ref_name }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v3
