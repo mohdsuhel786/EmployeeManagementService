@@ -44,12 +44,12 @@ jobs:
 
       - name: Detect changed services
         id: detect
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "Detecting changed services..."
           $changed = @()
           $services = $Env:SERVICES.Split(",")
-          git fetch --depth=2 origin ${{ github.ref_name }}
+          git fetch --depth=2 origin main
           foreach ($svc in $services) {
               if (git diff --name-only HEAD~1 HEAD | Select-String -Pattern "^$svc/") {
                   $changed += $svc
@@ -60,7 +60,6 @@ jobs:
               $changed = $services
           }
           Write-Host "Services to build: $($changed -join ',')"
-          # Use new syntax for outputs
           "services=$($changed -join ',')" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build Docker images locally
